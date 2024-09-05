@@ -302,7 +302,7 @@ class Fintopio {
       for (let i = 0; i < users.length; i++) {
         const userData = users[i];
         const proxy = this.getProxy(i);
-        const ip = await this.fetchIp(i);
+        const ip = await this.fetchIp(proxy);
         const first_name = this.extractFirstName(userData);
         this.log(
           `${"=".repeat(5)} Account ${i + 1} | ${first_name} ${"=".repeat(5)}`,
