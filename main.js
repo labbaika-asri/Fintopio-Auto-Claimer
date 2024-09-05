@@ -22,11 +22,46 @@ class Fintopio {
     };
   }
 
+  async loadProxies() {
+    const proxyFile = path.join(__dirname, "proxies.txt");
+    const proxyData = await fs.readFile(proxyFile, "utf8");
+    this.proxies = proxyData.split("\n").filter(Boolean);
+  }
+
+  getProxy(index) {
+    const proxy = this.proxies[index % this.proxies.length];
+    const [protocol, rest] = proxy.split("://");
+    const [auth, host] = rest.split("@");
+    const [ip, port] = host.split(":");
+    const [username, password] = auth.split(":");
+    return {
+      protocol,
+      host: ip,
+      port: parseInt(port),
+      auth: {
+        username,
+        password,
+      },
+    };
+  }
+
+  async fetchIp(proxy) {
+    try {
+      const response = await axios.get("https://api.ipify.org?format=json", {
+        proxy,
+      });
+      return response.data.ip;
+    } catch (error) {
+      this.log(`Error fetching IP: ${error.message}`, "red");
+      return "Unknown";
+    }
+  }
+
   log(msg, color = "white") {
     console.log(msg[color]);
   }
 
-  async waitWithCountdown(seconds, msg = 'continue') {
+  async waitWithCountdown(seconds, msg = "continue") {
     const spinners = ["|", "/", "-", "\\"];
     let i = 0;
     for (let s = seconds; s >= 0; s--) {
@@ -40,12 +75,15 @@ class Fintopio {
     console.log("");
   }
 
-  async auth(userData) {
+  async auth(userData, proxy) {
     const url = `${this.baseUrl}/auth/telegram`;
     const headers = { ...this.headers, Webapp: "true" };
 
     try {
-      const response = await axios.get(`${url}?${userData}`, { headers });
+      const response = await axios.get(`${url}?${userData}`, {
+        headers,
+        proxy,
+      });
       return response.data.token;
     } catch (error) {
       this.log(`Authentication error: ${error.message}`, "red");
@@ -53,7 +91,7 @@ class Fintopio {
     }
   }
 
-  async getProfile(token) {
+  async getProfile(token, proxy) {
     const url = `${this.baseUrl}/referrals/data`;
     const headers = {
       ...this.headers,
@@ -62,7 +100,7 @@ class Fintopio {
     };
 
     try {
-      const response = await axios.get(url, { headers });
+      const response = await axios.get(url, { headers, proxy });
       return response.data;
     } catch (error) {
       this.log(`Error fetching profile: ${error.message}`, "red");
@@ -70,7 +108,7 @@ class Fintopio {
     }
   }
 
-  async checkInDaily(token) {
+  async checkInDaily(token, proxy) {
     const url = `${this.baseUrl}/daily-checkins`;
     const headers = {
       ...this.headers,
@@ -79,14 +117,14 @@ class Fintopio {
     };
 
     try {
-      await axios.post(url, {}, { headers });
+      await axios.post(url, {}, { headers, proxy });
       this.log("Daily check-in successful!", "green");
     } catch (error) {
       this.log(`Daily check-in error: ${error.message}`, "red");
     }
   }
 
-  async getFarmingState(token) {
+  async getFarmingState(token, proxy) {
     const url = `${this.baseUrl}/farming/state`;
     const headers = {
       ...this.headers,
@@ -94,7 +132,7 @@ class Fintopio {
     };
 
     try {
-      const response = await axios.get(url, { headers });
+      const response = await axios.get(url, { headers, proxy });
       return response.data;
     } catch (error) {
       this.log(`Error fetching farming state: ${error.message}`, "red");
@@ -102,7 +140,7 @@ class Fintopio {
     }
   }
 
-  async startFarming(token) {
+  async startFarming(token, proxy) {
     const url = `${this.baseUrl}/farming/farm`;
     const headers = {
       ...this.headers,
@@ -111,7 +149,7 @@ class Fintopio {
     };
 
     try {
-      const response = await axios.post(url, {}, { headers });
+      const response = await axios.post(url, {}, { headers, proxy });
       const finishTimestamp = response.data.timings.finish;
 
       if (finishTimestamp) {
@@ -128,7 +166,7 @@ class Fintopio {
     }
   }
 
-  async claimFarming(token) {
+  async claimFarming(token, proxy) {
     const url = `${this.baseUrl}/farming/claim`;
     const headers = {
       ...this.headers,
@@ -137,95 +175,98 @@ class Fintopio {
     };
 
     try {
-      await axios.post(url, {}, { headers });
+      await axios.post(url, {}, { headers, proxy });
       this.log("Farm claimed successfully!", "green");
     } catch (error) {
       this.log(`Error claiming farm: ${error.message}`, "red");
     }
   }
 
-  async getDiamondInfo(token){
+  async getDiamondInfo(token, proxy) {
     const url = `${this.baseUrl}/clicker/diamond/state`;
     const headers = {
-        ...this.headers,
-        Authorization: `Bearer ${token}`,
-        "Content-Type": "application/json",
+      ...this.headers,
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
     };
 
     try {
-        const response = await axios.get(url, { headers });
-        return response.data;
-      } catch (error) {
-        this.log(`Error fetching diamond state: ${error.message}`, "red");
-        return null;
+      const response = await axios.get(url, { headers, proxy });
+      return response.data;
+    } catch (error) {
+      this.log(`Error fetching diamond state: ${error.message}`, "red");
+      return null;
     }
   }
 
-  async claimDiamond(token, diamondNumber, totalReward) {
+  async claimDiamond(token, diamondNumber, totalReward, proxy) {
     const url = `${this.baseUrl}/clicker/diamond/complete`;
     const headers = {
-        ...this.headers,
-        Authorization: `Bearer ${token}`,
-        "Content-Type": "application/json"
+      ...this.headers,
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
     };
-    const payload = { "diamondNumber": diamondNumber };
+    const payload = { diamondNumber: diamondNumber };
 
     try {
-        await axios.post(url, payload, { headers });
-        this.log(`Success claim ${totalReward} diamonds!`, "green");
-      } catch (error) {
-        this.log(`Error claiming Diamond: ${error.message}`, "red");
-      }
+      await axios.post(url, payload, { headers, proxy });
+      this.log(`Success claim ${totalReward} diamonds!`, "green");
+    } catch (error) {
+      this.log(`Error claiming Diamond: ${error.message}`, "red");
+    }
   }
 
-  async getTask(token) {
+  async getTask(token, proxy) {
     const url = `${this.baseUrl}/hold/tasks`;
     const headers = {
-        ...this.headers,
-        Authorization: `Bearer ${token}`,
-        "Content-Type": "application/json",
+      ...this.headers,
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
     };
 
     try {
-        const response = await axios.get(url, { headers });
-        return response.data;
-      } catch (error) {
-        this.log(`Error fetching task state: ${error.message}`, "red");
-        return null;
+      const response = await axios.get(url, { headers, proxy });
+      return response.data;
+    } catch (error) {
+      this.log(`Error fetching task state: ${error.message}`, "red");
+      return null;
     }
   }
 
-  async startTask(token, taskId, slug) {
+  async startTask(token, taskId, slug, proxy) {
     const url = `${this.baseUrl}/hold/tasks/${taskId}/start`;
     const headers = {
-        ...this.headers,
-        Authorization: `Bearer ${token}`,
-        "Content-Type": "application/json; charset=utf-8",
-        "origin": "https://fintopio-tg.fintopio.com"
+      ...this.headers,
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json; charset=utf-8",
+      origin: "https://fintopio-tg.fintopio.com",
     };
     try {
-        await axios.post(url, {}, { headers });
-        this.log(`Starting task ${slug}!`, "green");
-      } catch (error) {
-        this.log(`Error starting task: ${error.message}`, "red");
+      await axios.post(url, {}, { headers, proxy });
+      this.log(`Starting task ${slug}!`, "green");
+    } catch (error) {
+      this.log(`Error starting task: ${error.message}`, "red");
     }
-    }
+  }
 
-    async claimTask(token, taskId, slug, rewardAmount) {
-        const url = `${this.baseUrl}/hold/tasks/${taskId}/claim`;
-        const headers = {
-            ...this.headers,
-            Authorization: `Bearer ${token}`,
-            "Content-Type": "application/json; charset=utf-8",
-            "origin": "https://fintopio-tg.fintopio.com"
-        };
-        try {
-            await axios.post(url, {}, { headers });
-            this.log(`Task ${slug} complete, reward ${rewardAmount} diamonds!`, "green");
-          } catch (error) {
-            this.log(`Error claiming task: ${error.message}`, "red");
-        }
+  async claimTask(token, taskId, slug, rewardAmount, proxy) {
+    const url = `${this.baseUrl}/hold/tasks/${taskId}/claim`;
+    const headers = {
+      ...this.headers,
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json; charset=utf-8",
+      origin: "https://fintopio-tg.fintopio.com",
+    };
+    try {
+      await axios.post(url, {}, { headers, proxy });
+      this.log(
+        `Task ${slug} complete, reward ${rewardAmount} diamonds!`,
+        "green"
+      );
+    } catch (error) {
+      this.log(`Error claiming task: ${error.message}`, "red");
     }
+  }
 
   extractFirstName(userData) {
     try {
@@ -250,7 +291,7 @@ class Fintopio {
   }
 
   async main() {
-
+    await this.loadProxies();
     while (true) {
       const dataFile = path.join(__dirname, "data.txt");
       const data = await fs.readFile(dataFile, "utf8");
@@ -260,45 +301,55 @@ class Fintopio {
 
       for (let i = 0; i < users.length; i++) {
         const userData = users[i];
+        const proxy = this.getProxy(i);
+        const ip = await this.fetchIp(i);
         const first_name = this.extractFirstName(userData);
-        console.log(
-          `${"=".repeat(5)} Account ${i + 1} | ${first_name.green} ${"=".repeat(
-            5
-          )}`.blue
+        this.log(
+          `${"=".repeat(5)} Account ${i + 1} | ${first_name} ${"=".repeat(5)}`,
+          "blue"
         );
-        const token = await this.auth(userData);
+        this.log(`IP : ${ip}`, "green");
+        const token = await this.auth(userData, proxy);
         if (token) {
           this.log(`Login successful!`, "green");
-          const profile = await this.getProfile(token);
+          const profile = await this.getProfile(token, proxy);
           if (profile) {
             const balance = profile.balance;
             this.log(`Balance: ${balance}`, "green");
 
-            await this.checkInDaily(token);
+            await this.checkInDaily(token, proxy);
 
-            const diamond = await this.getDiamondInfo(token);
-            if(diamond.state === 'available') {
-              await this.waitWithCountdown(Math.floor(Math.random() * (21 - 10)) + 10, 'claim Diamonds');
-              await this.claimDiamond(token, diamond.diamondNumber, diamond.settings.totalReward);
+            const diamond = await this.getDiamondInfo(token, proxy);
+            if (diamond.state === "available") {
+              await this.waitWithCountdown(
+                Math.floor(Math.random() * (21 - 10)) + 10,
+                "claim Diamonds"
+              );
+              await this.claimDiamond(
+                token,
+                diamond.diamondNumber,
+                diamond.settings.totalReward,
+                proxy
+              );
             } else {
-                const nextDiamondTimeStamp = diamond.timings.nextAt;
-                if(nextDiamondTimeStamp) {
-                    const nextDiamondTime = DateTime.fromMillis(
-                        nextDiamondTimeStamp
-                    ).toLocaleString(DateTime.DATETIME_FULL);
-                    this.log(`Next Diamond time: ${nextDiamondTime}`, 'green');
+              const nextDiamondTimeStamp = diamond.timings.nextAt;
+              if (nextDiamondTimeStamp) {
+                const nextDiamondTime = DateTime.fromMillis(
+                  nextDiamondTimeStamp
+                ).toLocaleString(DateTime.DATETIME_FULL);
+                this.log(`Next Diamond time: ${nextDiamondTime}`, "green");
 
-                    if (i === 0) {
-                        firstAccountFinishTime = nextDiamondTimeStamp;
-                    }
+                if (i === 0) {
+                  firstAccountFinishTime = nextDiamondTimeStamp;
                 }
+              }
             }
 
-            const farmingState = await this.getFarmingState(token);
+            const farmingState = await this.getFarmingState(token, proxy);
 
             if (farmingState) {
               if (farmingState.state === "idling") {
-                await this.startFarming(token);
+                await this.startFarming(token, proxy);
               } else if (
                 farmingState.state === "farmed" ||
                 farmingState.state === "farming"
@@ -310,33 +361,39 @@ class Fintopio {
                   ).toLocaleString(DateTime.DATETIME_FULL);
                   this.log(`Farming completion time: ${finishTime}`, "green");
 
-                //   if (i === 0) {
-                //     firstAccountFinishTime = finishTimestamp;
-                //   }
+                  //   if (i === 0) {
+                  //     firstAccountFinishTime = finishTimestamp;
+                  //   }
 
                   const currentTime = DateTime.now().toMillis();
                   if (currentTime > finishTimestamp) {
-                    await this.claimFarming(token);
-                    await this.startFarming(token);
+                    await this.claimFarming(token, proxy);
+                    await this.startFarming(token, proxy);
                   }
                 }
               }
             }
 
-            const taskState = await this.getTask(token);
+            const taskState = await this.getTask(token, proxy);
 
-            if(taskState) {
-                for (const item of taskState.tasks) {
-                    if(item.status === 'available') {
-                        await this.startTask(token, item.id, item.slug);
-                    } else if(item.status === 'verified') {
-                        await this.claimTask(token, item.id, item.slug, item.rewardAmount);
-                    } else if(item.status === 'in-progress') {
-                        continue;
-                    } else {
-                        this.log(`Veryfing task ${item.slug}!`, "green");
-                    }
+            if (taskState) {
+              for (const item of taskState.tasks) {
+                if (item.status === "available") {
+                  await this.startTask(token, item.id, item.slug, proxy);
+                } else if (item.status === "verified") {
+                  await this.claimTask(
+                    token,
+                    item.id,
+                    item.slug,
+                    item.rewardAmount,
+                    proxy
+                  );
+                } else if (item.status === "in-progress") {
+                  continue;
+                } else {
+                  this.log(`Veryfing task ${item.slug}!`, "green");
                 }
+              }
             }
           }
         }
